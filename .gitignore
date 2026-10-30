@@ -1,0 +1,19 @@
+target/
+*.class
+
+# IDE
+.idea/
+*.iws
+*.iml
+*.ipr
+.vscode/
+
+# OS
+.DS_Store
+Icon?
+
+# секреты
+.env
+
+.env-test
+*.local.postman_environment.json

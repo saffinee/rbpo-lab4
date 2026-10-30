@@ -1,0 +1,2028 @@
+{
+  "info": {
+    "name": "Лаба 4 — безопасность парковки",
+    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json",
+    "description": "51 запрос. Укажите adminEmail/adminPassword в локальном окружении. Запускайте по порядку с включёнными cookies. CSRF получается автоматически перед изменениями."
+  },
+  "variable": [
+    {
+      "key": "baseUrl",
+      "value": "http://localhost:8080"
+    },
+    {
+      "key": "adminEmail",
+      "value": "admin@parking.local"
+    },
+    {
+      "key": "adminPassword",
+      "value": ""
+    },
+    {
+      "key": "userPassword",
+      "value": "ParkingDemo42!"
+    },
+    {
+      "key": "userEmail",
+      "value": ""
+    },
+    {
+      "key": "otherEmail",
+      "value": ""
+    },
+    {
+      "key": "plate",
+      "value": ""
+    }
+  ],
+  "event": [
+    {
+      "listen": "prerequest",
+      "script": {
+        "type": "text/javascript",
+        "exec": [
+          "if (pm.info.requestName.startsWith(\"01.\")) {",
+          "    const suffix = Date.now().toString(36);",
+          "    pm.collectionVariables.set(\"userEmail\", \"ivan-\" + suffix + \"@example.com\");",
+          "    pm.collectionVariables.set(\"otherEmail\", \"anna-\" + suffix + \"@example.com\");",
+          "    pm.collectionVariables.set(\"plate\", \"T\" + suffix);",
+          "}",
+          "if (![\"GET\", \"HEAD\", \"OPTIONS\"].includes(pm.request.method) && !pm.info.requestName.includes(\"без CSRF\")) {",
+          "    pm.sendRequest({url: pm.variables.get(\"baseUrl\") + \"/api/auth/csrf\", method: \"GET\"}, (err, res) => {",
+          "        if (err || res.code !== 200) throw new Error(\"Не удалось получить CSRF-токен\");",
+          "        const data = res.json();",
+          "        pm.request.headers.upsert({key: data.headerName, value: pm.info.requestName.includes(\"Неверный CSRF\") ? \"invalid\" : data.token});",
+          "    });",
+          "}"
+        ]
+      }
+    }
+  ],
+  "item": [
+    {
+      "name": "01. Получить CSRF-токен",
+      "request": {
+        "method": "GET",
+        "header": [],
+        "url": "{{baseUrl}}/api/auth/csrf",
+        "auth": {
+          "type": "noauth"
+        }
+      },
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "pm.test(\"HTTP 200\", () => pm.response.to.have.status(200));",
+              "pm.test(\"Пароль не раскрывается\", () => { pm.expect(pm.response.text()).not.to.include(\"passwordHash\"); pm.expect(pm.response.text()).not.to.include(\"$2a$\"); });",
+              "pm.test(\"Токен получен\", () => pm.expect(pm.response.json().token).to.be.a(\"string\"));"
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "name": "02. Без Basic Auth",
+      "request": {
+        "method": "GET",
+        "header": [],
+        "url": "{{baseUrl}}/api/vehicles",
+        "auth": {
+          "type": "noauth"
+        }
+      },
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "pm.test(\"HTTP 401\", () => pm.response.to.have.status(401));",
+              "pm.test(\"Пароль не раскрывается\", () => { pm.expect(pm.response.text()).not.to.include(\"passwordHash\"); pm.expect(pm.response.text()).not.to.include(\"$2a$\"); });"
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "name": "03. Регистрация без CSRF",
+      "request": {
+        "method": "POST",
+        "header": [
+          {
+            "key": "Content-Type",
+            "value": "application/json"
+          }
+        ],
+        "url": "{{baseUrl}}/api/auth/register",
+        "auth": {
+          "type": "noauth"
+        },
+        "body": {
+          "mode": "raw",
+          "raw": "{\"name\": \"Пользователь\", \"email\": \"{{userEmail}}\", \"password\": \"{{userPassword}}\"}",
+          "options": {
+            "raw": {
+              "language": "json"
+            }
+          }
+        }
+      },
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "pm.test(\"HTTP 403\", () => pm.response.to.have.status(403));",
+              "pm.test(\"Пароль не раскрывается\", () => { pm.expect(pm.response.text()).not.to.include(\"passwordHash\"); pm.expect(pm.response.text()).not.to.include(\"$2a$\"); });"
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "name": "04. Слабый пароль",
+      "request": {
+        "method": "POST",
+        "header": [
+          {
+            "key": "Content-Type",
+            "value": "application/json"
+          }
+        ],
+        "url": "{{baseUrl}}/api/auth/register",
+        "auth": {
+          "type": "noauth"
+        },
+        "body": {
+          "mode": "raw",
+          "raw": "{\"name\": \"Пользователь\", \"email\": \"{{userEmail}}\", \"password\": \"1234567890\"}",
+          "options": {
+            "raw": {
+              "language": "json"
+            }
+          }
+        }
+      },
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "pm.test(\"HTTP 400\", () => pm.response.to.have.status(400));",
+              "pm.test(\"Пароль не раскрывается\", () => { pm.expect(pm.response.text()).not.to.include(\"passwordHash\"); pm.expect(pm.response.text()).not.to.include(\"$2a$\"); });"
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "name": "05. Попытка назначить ADMIN",
+      "request": {
+        "method": "POST",
+        "header": [
+          {
+            "key": "Content-Type",
+            "value": "application/json"
+          }
+        ],
+        "url": "{{baseUrl}}/api/auth/register",
+        "auth": {
+          "type": "noauth"
+        },
+        "body": {
+          "mode": "raw",
+          "raw": "{\"name\": \"Пользователь\", \"email\": \"{{userEmail}}\", \"password\": \"{{userPassword}}\", \"role\": \"ADMIN\"}",
+          "options": {
+            "raw": {
+              "language": "json"
+            }
+          }
+        }
+      },
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "pm.test(\"HTTP 400\", () => pm.response.to.have.status(400));",
+              "pm.test(\"Пароль не раскрывается\", () => { pm.expect(pm.response.text()).not.to.include(\"passwordHash\"); pm.expect(pm.response.text()).not.to.include(\"$2a$\"); });"
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "name": "06. Регистрация пользователя",
+      "request": {
+        "method": "POST",
+        "header": [
+          {
+            "key": "Content-Type",
+            "value": "application/json"
+          }
+        ],
+        "url": "{{baseUrl}}/api/auth/register",
+        "auth": {
+          "type": "noauth"
+        },
+        "body": {
+          "mode": "raw",
+          "raw": "{\"name\": \"Иван\", \"email\": \"{{userEmail}}\", \"password\": \"{{userPassword}}\"}",
+          "options": {
+            "raw": {
+              "language": "json"
+            }
+          }
+        }
+      },
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "pm.test(\"HTTP 201\", () => pm.response.to.have.status(201));",
+              "pm.test(\"Пароль не раскрывается\", () => { pm.expect(pm.response.text()).not.to.include(\"passwordHash\"); pm.expect(pm.response.text()).not.to.include(\"$2a$\"); });",
+              "if (pm.response.code === 201) pm.collectionVariables.set(\"userId\", pm.response.json().id);",
+              "pm.test(\"Обычная роль\", () => pm.expect(pm.response.json().role).to.eql(\"USER\"));"
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "name": "07. Повторный email",
+      "request": {
+        "method": "POST",
+        "header": [
+          {
+            "key": "Content-Type",
+            "value": "application/json"
+          }
+        ],
+        "url": "{{baseUrl}}/api/auth/register",
+        "auth": {
+          "type": "noauth"
+        },
+        "body": {
+          "mode": "raw",
+          "raw": "{\"name\": \"Иван\", \"email\": \"{{userEmail}}\", \"password\": \"{{userPassword}}\"}",
+          "options": {
+            "raw": {
+              "language": "json"
+            }
+          }
+        }
+      },
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "pm.test(\"HTTP 409\", () => pm.response.to.have.status(409));",
+              "pm.test(\"Пароль не раскрывается\", () => { pm.expect(pm.response.text()).not.to.include(\"passwordHash\"); pm.expect(pm.response.text()).not.to.include(\"$2a$\"); });"
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "name": "08. Регистрация второго пользователя",
+      "request": {
+        "method": "POST",
+        "header": [
+          {
+            "key": "Content-Type",
+            "value": "application/json"
+          }
+        ],
+        "url": "{{baseUrl}}/api/auth/register",
+        "auth": {
+          "type": "noauth"
+        },
+        "body": {
+          "mode": "raw",
+          "raw": "{\"name\": \"Анна\", \"email\": \"{{otherEmail}}\", \"password\": \"{{userPassword}}\"}",
+          "options": {
+            "raw": {
+              "language": "json"
+            }
+          }
+        }
+      },
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "pm.test(\"HTTP 201\", () => pm.response.to.have.status(201));",
+              "pm.test(\"Пароль не раскрывается\", () => { pm.expect(pm.response.text()).not.to.include(\"passwordHash\"); pm.expect(pm.response.text()).not.to.include(\"$2a$\"); });",
+              "if (pm.response.code === 201) pm.collectionVariables.set(\"otherId\", pm.response.json().id);"
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "name": "09. Пользователь видит только себя",
+      "request": {
+        "method": "GET",
+        "header": [],
+        "url": "{{baseUrl}}/api/users",
+        "auth": {
+          "type": "basic",
+          "basic": [
+            {
+              "key": "username",
+              "value": "{{userEmail}}",
+              "type": "string"
+            },
+            {
+              "key": "password",
+              "value": "{{userPassword}}",
+              "type": "string"
+            }
+          ]
+        }
+      },
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "pm.test(\"HTTP 200\", () => pm.response.to.have.status(200));",
+              "pm.test(\"Пароль не раскрывается\", () => { pm.expect(pm.response.text()).not.to.include(\"passwordHash\"); pm.expect(pm.response.text()).not.to.include(\"$2a$\"); });",
+              "pm.test(\"Одна запись\", () => pm.expect(pm.response.json().length).to.eql(1));"
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "name": "10. Чужой профиль",
+      "request": {
+        "method": "GET",
+        "header": [],
+        "url": "{{baseUrl}}/api/users/{{otherId}}",
+        "auth": {
+          "type": "basic",
+          "basic": [
+            {
+              "key": "username",
+              "value": "{{userEmail}}",
+              "type": "string"
+            },
+            {
+              "key": "password",
+              "value": "{{userPassword}}",
+              "type": "string"
+            }
+          ]
+        }
+      },
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "pm.test(\"HTTP 403\", () => pm.response.to.have.status(403));",
+              "pm.test(\"Пароль не раскрывается\", () => { pm.expect(pm.response.text()).not.to.include(\"passwordHash\"); pm.expect(pm.response.text()).not.to.include(\"$2a$\"); });"
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "name": "11. Обновить своё имя",
+      "request": {
+        "method": "PATCH",
+        "header": [
+          {
+            "key": "Content-Type",
+            "value": "application/json"
+          }
+        ],
+        "url": "{{baseUrl}}/api/users/{{userId}}",
+        "auth": {
+          "type": "basic",
+          "basic": [
+            {
+              "key": "username",
+              "value": "{{userEmail}}",
+              "type": "string"
+            },
+            {
+              "key": "password",
+              "value": "{{userPassword}}",
+              "type": "string"
+            }
+          ]
+        },
+        "body": {
+          "mode": "raw",
+          "raw": "{\"name\": \"Иван Петров\"}",
+          "options": {
+            "raw": {
+              "language": "json"
+            }
+          }
+        }
+      },
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "pm.test(\"HTTP 200\", () => pm.response.to.have.status(200));",
+              "pm.test(\"Пароль не раскрывается\", () => { pm.expect(pm.response.text()).not.to.include(\"passwordHash\"); pm.expect(pm.response.text()).not.to.include(\"$2a$\"); });"
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "name": "12. Изменить роль через профиль",
+      "request": {
+        "method": "PATCH",
+        "header": [
+          {
+            "key": "Content-Type",
+            "value": "application/json"
+          }
+        ],
+        "url": "{{baseUrl}}/api/users/{{userId}}",
+        "auth": {
+          "type": "basic",
+          "basic": [
+            {
+              "key": "username",
+              "value": "{{userEmail}}",
+              "type": "string"
+            },
+            {
+              "key": "password",
+              "value": "{{userPassword}}",
+              "type": "string"
+            }
+          ]
+        },
+        "body": {
+          "mode": "raw",
+          "raw": "{\"name\": \"Иван\", \"role\": \"ADMIN\"}",
+          "options": {
+            "raw": {
+              "language": "json"
+            }
+          }
+        }
+      },
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "pm.test(\"HTTP 400\", () => pm.response.to.have.status(400));",
+              "pm.test(\"Пароль не раскрывается\", () => { pm.expect(pm.response.text()).not.to.include(\"passwordHash\"); pm.expect(pm.response.text()).not.to.include(\"$2a$\"); });"
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "name": "13. Создать зону: USER",
+      "request": {
+        "method": "POST",
+        "header": [
+          {
+            "key": "Content-Type",
+            "value": "application/json"
+          }
+        ],
+        "url": "{{baseUrl}}/api/parking-zones",
+        "auth": {
+          "type": "basic",
+          "basic": [
+            {
+              "key": "username",
+              "value": "{{userEmail}}",
+              "type": "string"
+            },
+            {
+              "key": "password",
+              "value": "{{userPassword}}",
+              "type": "string"
+            }
+          ]
+        },
+        "body": {
+          "mode": "raw",
+          "raw": "{\"capacity\": 1, \"hourlyPrice\": 100}",
+          "options": {
+            "raw": {
+              "language": "json"
+            }
+          }
+        }
+      },
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "pm.test(\"HTTP 403\", () => pm.response.to.have.status(403));",
+              "pm.test(\"Пароль не раскрывается\", () => { pm.expect(pm.response.text()).not.to.include(\"passwordHash\"); pm.expect(pm.response.text()).not.to.include(\"$2a$\"); });"
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "name": "14. Создать зону: ADMIN",
+      "request": {
+        "method": "POST",
+        "header": [
+          {
+            "key": "Content-Type",
+            "value": "application/json"
+          }
+        ],
+        "url": "{{baseUrl}}/api/parking-zones",
+        "auth": {
+          "type": "basic",
+          "basic": [
+            {
+              "key": "username",
+              "value": "{{adminEmail}}",
+              "type": "string"
+            },
+            {
+              "key": "password",
+              "value": "{{adminPassword}}",
+              "type": "string"
+            }
+          ]
+        },
+        "body": {
+          "mode": "raw",
+          "raw": "{\"capacity\": 1, \"hourlyPrice\": 100}",
+          "options": {
+            "raw": {
+              "language": "json"
+            }
+          }
+        }
+      },
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "pm.test(\"HTTP 201\", () => pm.response.to.have.status(201));",
+              "pm.test(\"Пароль не раскрывается\", () => { pm.expect(pm.response.text()).not.to.include(\"passwordHash\"); pm.expect(pm.response.text()).not.to.include(\"$2a$\"); });",
+              "if (pm.response.code === 201) pm.collectionVariables.set(\"zoneId\", pm.response.json().id);"
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "name": "15. Чтение зон",
+      "request": {
+        "method": "GET",
+        "header": [],
+        "url": "{{baseUrl}}/api/parking-zones",
+        "auth": {
+          "type": "basic",
+          "basic": [
+            {
+              "key": "username",
+              "value": "{{userEmail}}",
+              "type": "string"
+            },
+            {
+              "key": "password",
+              "value": "{{userPassword}}",
+              "type": "string"
+            }
+          ]
+        }
+      },
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "pm.test(\"HTTP 200\", () => pm.response.to.have.status(200));",
+              "pm.test(\"Пароль не раскрывается\", () => { pm.expect(pm.response.text()).not.to.include(\"passwordHash\"); pm.expect(pm.response.text()).not.to.include(\"$2a$\"); });"
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "name": "16. Обновить зону: ADMIN",
+      "request": {
+        "method": "PATCH",
+        "header": [
+          {
+            "key": "Content-Type",
+            "value": "application/json"
+          }
+        ],
+        "url": "{{baseUrl}}/api/parking-zones/{{zoneId}}",
+        "auth": {
+          "type": "basic",
+          "basic": [
+            {
+              "key": "username",
+              "value": "{{adminEmail}}",
+              "type": "string"
+            },
+            {
+              "key": "password",
+              "value": "{{adminPassword}}",
+              "type": "string"
+            }
+          ]
+        },
+        "body": {
+          "mode": "raw",
+          "raw": "{\"hourlyPrice\": 120}",
+          "options": {
+            "raw": {
+              "language": "json"
+            }
+          }
+        }
+      },
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "pm.test(\"HTTP 200\", () => pm.response.to.have.status(200));",
+              "pm.test(\"Пароль не раскрывается\", () => { pm.expect(pm.response.text()).not.to.include(\"passwordHash\"); pm.expect(pm.response.text()).not.to.include(\"$2a$\"); });"
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "name": "17. Создать машину другому: USER",
+      "request": {
+        "method": "POST",
+        "header": [
+          {
+            "key": "Content-Type",
+            "value": "application/json"
+          }
+        ],
+        "url": "{{baseUrl}}/api/vehicles?ownerId={{otherId}}",
+        "auth": {
+          "type": "basic",
+          "basic": [
+            {
+              "key": "username",
+              "value": "{{userEmail}}",
+              "type": "string"
+            },
+            {
+              "key": "password",
+              "value": "{{userPassword}}",
+              "type": "string"
+            }
+          ]
+        },
+        "body": {
+          "mode": "raw",
+          "raw": "{\"number\": \"{{plate}}\"}",
+          "options": {
+            "raw": {
+              "language": "json"
+            }
+          }
+        }
+      },
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "pm.test(\"HTTP 403\", () => pm.response.to.have.status(403));",
+              "pm.test(\"Пароль не раскрывается\", () => { pm.expect(pm.response.text()).not.to.include(\"passwordHash\"); pm.expect(pm.response.text()).not.to.include(\"$2a$\"); });"
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "name": "18. Создать свою машину",
+      "request": {
+        "method": "POST",
+        "header": [
+          {
+            "key": "Content-Type",
+            "value": "application/json"
+          }
+        ],
+        "url": "{{baseUrl}}/api/vehicles?ownerId={{userId}}",
+        "auth": {
+          "type": "basic",
+          "basic": [
+            {
+              "key": "username",
+              "value": "{{userEmail}}",
+              "type": "string"
+            },
+            {
+              "key": "password",
+              "value": "{{userPassword}}",
+              "type": "string"
+            }
+          ]
+        },
+        "body": {
+          "mode": "raw",
+          "raw": "{\"number\": \"{{plate}}\"}",
+          "options": {
+            "raw": {
+              "language": "json"
+            }
+          }
+        }
+      },
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "pm.test(\"HTTP 201\", () => pm.response.to.have.status(201));",
+              "pm.test(\"Пароль не раскрывается\", () => { pm.expect(pm.response.text()).not.to.include(\"passwordHash\"); pm.expect(pm.response.text()).not.to.include(\"$2a$\"); });",
+              "if (pm.response.code === 201) pm.collectionVariables.set(\"vehicleId\", pm.response.json().id);"
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "name": "19. Чужая машина",
+      "request": {
+        "method": "GET",
+        "header": [],
+        "url": "{{baseUrl}}/api/vehicles/{{vehicleId}}",
+        "auth": {
+          "type": "basic",
+          "basic": [
+            {
+              "key": "username",
+              "value": "{{otherEmail}}",
+              "type": "string"
+            },
+            {
+              "key": "password",
+              "value": "{{userPassword}}",
+              "type": "string"
+            }
+          ]
+        }
+      },
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "pm.test(\"HTTP 403\", () => pm.response.to.have.status(403));",
+              "pm.test(\"Пароль не раскрывается\", () => { pm.expect(pm.response.text()).not.to.include(\"passwordHash\"); pm.expect(pm.response.text()).not.to.include(\"$2a$\"); });"
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "name": "20. Изменить чужую машину",
+      "request": {
+        "method": "PATCH",
+        "header": [
+          {
+            "key": "Content-Type",
+            "value": "application/json"
+          }
+        ],
+        "url": "{{baseUrl}}/api/vehicles/{{vehicleId}}",
+        "auth": {
+          "type": "basic",
+          "basic": [
+            {
+              "key": "username",
+              "value": "{{otherEmail}}",
+              "type": "string"
+            },
+            {
+              "key": "password",
+              "value": "{{userPassword}}",
+              "type": "string"
+            }
+          ]
+        },
+        "body": {
+          "mode": "raw",
+          "raw": "{\"number\": \"BAD\"}",
+          "options": {
+            "raw": {
+              "language": "json"
+            }
+          }
+        }
+      },
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "pm.test(\"HTTP 403\", () => pm.response.to.have.status(403));",
+              "pm.test(\"Пароль не раскрывается\", () => { pm.expect(pm.response.text()).not.to.include(\"passwordHash\"); pm.expect(pm.response.text()).not.to.include(\"$2a$\"); });"
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "name": "21. Обновить свою машину",
+      "request": {
+        "method": "PATCH",
+        "header": [
+          {
+            "key": "Content-Type",
+            "value": "application/json"
+          }
+        ],
+        "url": "{{baseUrl}}/api/vehicles/{{vehicleId}}",
+        "auth": {
+          "type": "basic",
+          "basic": [
+            {
+              "key": "username",
+              "value": "{{userEmail}}",
+              "type": "string"
+            },
+            {
+              "key": "password",
+              "value": "{{userPassword}}",
+              "type": "string"
+            }
+          ]
+        },
+        "body": {
+          "mode": "raw",
+          "raw": "{\"number\": \"{{plate}}X\"}",
+          "options": {
+            "raw": {
+              "language": "json"
+            }
+          }
+        }
+      },
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "pm.test(\"HTTP 200\", () => pm.response.to.have.status(200));",
+              "pm.test(\"Пароль не раскрывается\", () => { pm.expect(pm.response.text()).not.to.include(\"passwordHash\"); pm.expect(pm.response.text()).not.to.include(\"$2a$\"); });"
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "name": "22. Купить абонемент",
+      "request": {
+        "method": "POST",
+        "header": [],
+        "url": "{{baseUrl}}/api/parking-passes/purchase?vehicleId={{vehicleId}}&zoneId={{zoneId}}&days=10",
+        "auth": {
+          "type": "basic",
+          "basic": [
+            {
+              "key": "username",
+              "value": "{{userEmail}}",
+              "type": "string"
+            },
+            {
+              "key": "password",
+              "value": "{{userPassword}}",
+              "type": "string"
+            }
+          ]
+        }
+      },
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "pm.test(\"HTTP 201\", () => pm.response.to.have.status(201));",
+              "pm.test(\"Пароль не раскрывается\", () => { pm.expect(pm.response.text()).not.to.include(\"passwordHash\"); pm.expect(pm.response.text()).not.to.include(\"$2a$\"); });",
+              "if (pm.response.code === 201) pm.collectionVariables.set(\"passId\", pm.response.json().id);"
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "name": "23. Повторная покупка",
+      "request": {
+        "method": "POST",
+        "header": [],
+        "url": "{{baseUrl}}/api/parking-passes/purchase?vehicleId={{vehicleId}}&zoneId={{zoneId}}&days=10",
+        "auth": {
+          "type": "basic",
+          "basic": [
+            {
+              "key": "username",
+              "value": "{{userEmail}}",
+              "type": "string"
+            },
+            {
+              "key": "password",
+              "value": "{{userPassword}}",
+              "type": "string"
+            }
+          ]
+        }
+      },
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "pm.test(\"HTTP 409\", () => pm.response.to.have.status(409));",
+              "pm.test(\"Пароль не раскрывается\", () => { pm.expect(pm.response.text()).not.to.include(\"passwordHash\"); pm.expect(pm.response.text()).not.to.include(\"$2a$\"); });"
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "name": "24. Продлить чужой абонемент",
+      "request": {
+        "method": "POST",
+        "header": [],
+        "url": "{{baseUrl}}/api/parking-passes/{{passId}}/extend?days=5",
+        "auth": {
+          "type": "basic",
+          "basic": [
+            {
+              "key": "username",
+              "value": "{{otherEmail}}",
+              "type": "string"
+            },
+            {
+              "key": "password",
+              "value": "{{userPassword}}",
+              "type": "string"
+            }
+          ]
+        }
+      },
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "pm.test(\"HTTP 403\", () => pm.response.to.have.status(403));",
+              "pm.test(\"Пароль не раскрывается\", () => { pm.expect(pm.response.text()).not.to.include(\"passwordHash\"); pm.expect(pm.response.text()).not.to.include(\"$2a$\"); });"
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "name": "25. Продлить свой абонемент",
+      "request": {
+        "method": "POST",
+        "header": [],
+        "url": "{{baseUrl}}/api/parking-passes/{{passId}}/extend?days=5",
+        "auth": {
+          "type": "basic",
+          "basic": [
+            {
+              "key": "username",
+              "value": "{{userEmail}}",
+              "type": "string"
+            },
+            {
+              "key": "password",
+              "value": "{{userPassword}}",
+              "type": "string"
+            }
+          ]
+        }
+      },
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "pm.test(\"HTTP 200\", () => pm.response.to.have.status(200));",
+              "pm.test(\"Пароль не раскрывается\", () => { pm.expect(pm.response.text()).not.to.include(\"passwordHash\"); pm.expect(pm.response.text()).not.to.include(\"$2a$\"); });"
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "name": "26. Въезд чужой машины",
+      "request": {
+        "method": "POST",
+        "header": [],
+        "url": "{{baseUrl}}/api/parking-sessions/entry?vehicleId={{vehicleId}}&zoneId={{zoneId}}",
+        "auth": {
+          "type": "basic",
+          "basic": [
+            {
+              "key": "username",
+              "value": "{{otherEmail}}",
+              "type": "string"
+            },
+            {
+              "key": "password",
+              "value": "{{userPassword}}",
+              "type": "string"
+            }
+          ]
+        }
+      },
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "pm.test(\"HTTP 403\", () => pm.response.to.have.status(403));",
+              "pm.test(\"Пароль не раскрывается\", () => { pm.expect(pm.response.text()).not.to.include(\"passwordHash\"); pm.expect(pm.response.text()).not.to.include(\"$2a$\"); });"
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "name": "27. Въезд своей машины",
+      "request": {
+        "method": "POST",
+        "header": [],
+        "url": "{{baseUrl}}/api/parking-sessions/entry?vehicleId={{vehicleId}}&zoneId={{zoneId}}",
+        "auth": {
+          "type": "basic",
+          "basic": [
+            {
+              "key": "username",
+              "value": "{{userEmail}}",
+              "type": "string"
+            },
+            {
+              "key": "password",
+              "value": "{{userPassword}}",
+              "type": "string"
+            }
+          ]
+        }
+      },
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "pm.test(\"HTTP 201\", () => pm.response.to.have.status(201));",
+              "pm.test(\"Пароль не раскрывается\", () => { pm.expect(pm.response.text()).not.to.include(\"passwordHash\"); pm.expect(pm.response.text()).not.to.include(\"$2a$\"); });",
+              "if (pm.response.code === 201) pm.collectionVariables.set(\"sessionId\", pm.response.json().id);"
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "name": "28. Повторный въезд",
+      "request": {
+        "method": "POST",
+        "header": [],
+        "url": "{{baseUrl}}/api/parking-sessions/entry?vehicleId={{vehicleId}}&zoneId={{zoneId}}",
+        "auth": {
+          "type": "basic",
+          "basic": [
+            {
+              "key": "username",
+              "value": "{{userEmail}}",
+              "type": "string"
+            },
+            {
+              "key": "password",
+              "value": "{{userPassword}}",
+              "type": "string"
+            }
+          ]
+        }
+      },
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "pm.test(\"HTTP 409\", () => pm.response.to.have.status(409));",
+              "pm.test(\"Пароль не раскрывается\", () => { pm.expect(pm.response.text()).not.to.include(\"passwordHash\"); pm.expect(pm.response.text()).not.to.include(\"$2a$\"); });"
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "name": "29. Передать машину во время стоянки",
+      "request": {
+        "method": "POST",
+        "header": [],
+        "url": "{{baseUrl}}/api/vehicles/{{vehicleId}}/transfer?newOwnerId={{otherId}}",
+        "auth": {
+          "type": "basic",
+          "basic": [
+            {
+              "key": "username",
+              "value": "{{userEmail}}",
+              "type": "string"
+            },
+            {
+              "key": "password",
+              "value": "{{userPassword}}",
+              "type": "string"
+            }
+          ]
+        }
+      },
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "pm.test(\"HTTP 409\", () => pm.response.to.have.status(409));",
+              "pm.test(\"Пароль не раскрывается\", () => { pm.expect(pm.response.text()).not.to.include(\"passwordHash\"); pm.expect(pm.response.text()).not.to.include(\"$2a$\"); });"
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "name": "30. Завершить чужую стоянку",
+      "request": {
+        "method": "POST",
+        "header": [],
+        "url": "{{baseUrl}}/api/parking-sessions/{{sessionId}}/exit",
+        "auth": {
+          "type": "basic",
+          "basic": [
+            {
+              "key": "username",
+              "value": "{{otherEmail}}",
+              "type": "string"
+            },
+            {
+              "key": "password",
+              "value": "{{userPassword}}",
+              "type": "string"
+            }
+          ]
+        }
+      },
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "pm.test(\"HTTP 403\", () => pm.response.to.have.status(403));",
+              "pm.test(\"Пароль не раскрывается\", () => { pm.expect(pm.response.text()).not.to.include(\"passwordHash\"); pm.expect(pm.response.text()).not.to.include(\"$2a$\"); });"
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "name": "31. Выезд по абонементу",
+      "request": {
+        "method": "POST",
+        "header": [],
+        "url": "{{baseUrl}}/api/parking-sessions/{{sessionId}}/exit",
+        "auth": {
+          "type": "basic",
+          "basic": [
+            {
+              "key": "username",
+              "value": "{{userEmail}}",
+              "type": "string"
+            },
+            {
+              "key": "password",
+              "value": "{{userPassword}}",
+              "type": "string"
+            }
+          ]
+        }
+      },
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "pm.test(\"HTTP 200\", () => pm.response.to.have.status(200));",
+              "pm.test(\"Пароль не раскрывается\", () => { pm.expect(pm.response.text()).not.to.include(\"passwordHash\"); pm.expect(pm.response.text()).not.to.include(\"$2a$\"); });",
+              "pm.test(\"Бесплатно\", () => pm.expect(pm.response.json().amount).to.eql(0));"
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "name": "32. Повторный выезд",
+      "request": {
+        "method": "POST",
+        "header": [],
+        "url": "{{baseUrl}}/api/parking-sessions/{{sessionId}}/exit",
+        "auth": {
+          "type": "basic",
+          "basic": [
+            {
+              "key": "username",
+              "value": "{{userEmail}}",
+              "type": "string"
+            },
+            {
+              "key": "password",
+              "value": "{{userPassword}}",
+              "type": "string"
+            }
+          ]
+        }
+      },
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "pm.test(\"HTTP 409\", () => pm.response.to.have.status(409));",
+              "pm.test(\"Пароль не раскрывается\", () => { pm.expect(pm.response.text()).not.to.include(\"passwordHash\"); pm.expect(pm.response.text()).not.to.include(\"$2a$\"); });"
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "name": "33. Удаление истории запрещено USER",
+      "request": {
+        "method": "DELETE",
+        "header": [],
+        "url": "{{baseUrl}}/api/parking-sessions/{{sessionId}}",
+        "auth": {
+          "type": "basic",
+          "basic": [
+            {
+              "key": "username",
+              "value": "{{userEmail}}",
+              "type": "string"
+            },
+            {
+              "key": "password",
+              "value": "{{userPassword}}",
+              "type": "string"
+            }
+          ]
+        }
+      },
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "pm.test(\"HTTP 403\", () => pm.response.to.have.status(403));",
+              "pm.test(\"Пароль не раскрывается\", () => { pm.expect(pm.response.text()).not.to.include(\"passwordHash\"); pm.expect(pm.response.text()).not.to.include(\"$2a$\"); });"
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "name": "34. Передать автомобиль",
+      "request": {
+        "method": "POST",
+        "header": [],
+        "url": "{{baseUrl}}/api/vehicles/{{vehicleId}}/transfer?newOwnerId={{otherId}}",
+        "auth": {
+          "type": "basic",
+          "basic": [
+            {
+              "key": "username",
+              "value": "{{userEmail}}",
+              "type": "string"
+            },
+            {
+              "key": "password",
+              "value": "{{userPassword}}",
+              "type": "string"
+            }
+          ]
+        }
+      },
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "pm.test(\"HTTP 200\", () => pm.response.to.have.status(200));",
+              "pm.test(\"Пароль не раскрывается\", () => { pm.expect(pm.response.text()).not.to.include(\"passwordHash\"); pm.expect(pm.response.text()).not.to.include(\"$2a$\"); });"
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "name": "35. Бывший владелец потерял доступ",
+      "request": {
+        "method": "GET",
+        "header": [],
+        "url": "{{baseUrl}}/api/vehicles/{{vehicleId}}",
+        "auth": {
+          "type": "basic",
+          "basic": [
+            {
+              "key": "username",
+              "value": "{{userEmail}}",
+              "type": "string"
+            },
+            {
+              "key": "password",
+              "value": "{{userPassword}}",
+              "type": "string"
+            }
+          ]
+        }
+      },
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "pm.test(\"HTTP 403\", () => pm.response.to.have.status(403));",
+              "pm.test(\"Пароль не раскрывается\", () => { pm.expect(pm.response.text()).not.to.include(\"passwordHash\"); pm.expect(pm.response.text()).not.to.include(\"$2a$\"); });"
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "name": "36. Новый владелец получил доступ",
+      "request": {
+        "method": "GET",
+        "header": [],
+        "url": "{{baseUrl}}/api/vehicles/{{vehicleId}}",
+        "auth": {
+          "type": "basic",
+          "basic": [
+            {
+              "key": "username",
+              "value": "{{otherEmail}}",
+              "type": "string"
+            },
+            {
+              "key": "password",
+              "value": "{{userPassword}}",
+              "type": "string"
+            }
+          ]
+        }
+      },
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "pm.test(\"HTTP 200\", () => pm.response.to.have.status(200));",
+              "pm.test(\"Пароль не раскрывается\", () => { pm.expect(pm.response.text()).not.to.include(\"passwordHash\"); pm.expect(pm.response.text()).not.to.include(\"$2a$\"); });"
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "name": "37. Абонемент отменён при передаче",
+      "request": {
+        "method": "GET",
+        "header": [],
+        "url": "{{baseUrl}}/api/parking-passes/{{passId}}",
+        "auth": {
+          "type": "basic",
+          "basic": [
+            {
+              "key": "username",
+              "value": "{{otherEmail}}",
+              "type": "string"
+            },
+            {
+              "key": "password",
+              "value": "{{userPassword}}",
+              "type": "string"
+            }
+          ]
+        }
+      },
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "pm.test(\"HTTP 200\", () => pm.response.to.have.status(200));",
+              "pm.test(\"Пароль не раскрывается\", () => { pm.expect(pm.response.text()).not.to.include(\"passwordHash\"); pm.expect(pm.response.text()).not.to.include(\"$2a$\"); });",
+              "pm.test(\"CANCELLED\", () => pm.expect(pm.response.json().status).to.eql(\"CANCELLED\"));"
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "name": "38. Отменённый абонемент не продлить",
+      "request": {
+        "method": "POST",
+        "header": [],
+        "url": "{{baseUrl}}/api/parking-passes/{{passId}}/extend?days=5",
+        "auth": {
+          "type": "basic",
+          "basic": [
+            {
+              "key": "username",
+              "value": "{{otherEmail}}",
+              "type": "string"
+            },
+            {
+              "key": "password",
+              "value": "{{userPassword}}",
+              "type": "string"
+            }
+          ]
+        }
+      },
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "pm.test(\"HTTP 409\", () => pm.response.to.have.status(409));",
+              "pm.test(\"Пароль не раскрывается\", () => { pm.expect(pm.response.text()).not.to.include(\"passwordHash\"); pm.expect(pm.response.text()).not.to.include(\"$2a$\"); });"
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "name": "39. Пользователь не меняет состояние",
+      "request": {
+        "method": "PATCH",
+        "header": [
+          {
+            "key": "Content-Type",
+            "value": "application/json"
+          }
+        ],
+        "url": "{{baseUrl}}/api/users/{{otherId}}/state",
+        "auth": {
+          "type": "basic",
+          "basic": [
+            {
+              "key": "username",
+              "value": "{{otherEmail}}",
+              "type": "string"
+            },
+            {
+              "key": "password",
+              "value": "{{userPassword}}",
+              "type": "string"
+            }
+          ]
+        },
+        "body": {
+          "mode": "raw",
+          "raw": "{\"enabled\": true, \"locked\": false}",
+          "options": {
+            "raw": {
+              "language": "json"
+            }
+          }
+        }
+      },
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "pm.test(\"HTTP 403\", () => pm.response.to.have.status(403));",
+              "pm.test(\"Пароль не раскрывается\", () => { pm.expect(pm.response.text()).not.to.include(\"passwordHash\"); pm.expect(pm.response.text()).not.to.include(\"$2a$\"); });"
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "name": "40. ADMIN блокирует пользователя",
+      "request": {
+        "method": "PATCH",
+        "header": [
+          {
+            "key": "Content-Type",
+            "value": "application/json"
+          }
+        ],
+        "url": "{{baseUrl}}/api/users/{{otherId}}/state",
+        "auth": {
+          "type": "basic",
+          "basic": [
+            {
+              "key": "username",
+              "value": "{{adminEmail}}",
+              "type": "string"
+            },
+            {
+              "key": "password",
+              "value": "{{adminPassword}}",
+              "type": "string"
+            }
+          ]
+        },
+        "body": {
+          "mode": "raw",
+          "raw": "{\"enabled\": true, \"locked\": true}",
+          "options": {
+            "raw": {
+              "language": "json"
+            }
+          }
+        }
+      },
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "pm.test(\"HTTP 200\", () => pm.response.to.have.status(200));",
+              "pm.test(\"Пароль не раскрывается\", () => { pm.expect(pm.response.text()).not.to.include(\"passwordHash\"); pm.expect(pm.response.text()).not.to.include(\"$2a$\"); });"
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "name": "41. Заблокированный получает 401",
+      "request": {
+        "method": "GET",
+        "header": [],
+        "url": "{{baseUrl}}/api/vehicles",
+        "auth": {
+          "type": "basic",
+          "basic": [
+            {
+              "key": "username",
+              "value": "{{otherEmail}}",
+              "type": "string"
+            },
+            {
+              "key": "password",
+              "value": "{{userPassword}}",
+              "type": "string"
+            }
+          ]
+        }
+      },
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "pm.test(\"HTTP 401\", () => pm.response.to.have.status(401));",
+              "pm.test(\"Пароль не раскрывается\", () => { pm.expect(pm.response.text()).not.to.include(\"passwordHash\"); pm.expect(pm.response.text()).not.to.include(\"$2a$\"); });"
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "name": "42. ADMIN отключает пользователя",
+      "request": {
+        "method": "PATCH",
+        "header": [
+          {
+            "key": "Content-Type",
+            "value": "application/json"
+          }
+        ],
+        "url": "{{baseUrl}}/api/users/{{otherId}}/state",
+        "auth": {
+          "type": "basic",
+          "basic": [
+            {
+              "key": "username",
+              "value": "{{adminEmail}}",
+              "type": "string"
+            },
+            {
+              "key": "password",
+              "value": "{{adminPassword}}",
+              "type": "string"
+            }
+          ]
+        },
+        "body": {
+          "mode": "raw",
+          "raw": "{\"enabled\": false, \"locked\": false}",
+          "options": {
+            "raw": {
+              "language": "json"
+            }
+          }
+        }
+      },
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "pm.test(\"HTTP 200\", () => pm.response.to.have.status(200));",
+              "pm.test(\"Пароль не раскрывается\", () => { pm.expect(pm.response.text()).not.to.include(\"passwordHash\"); pm.expect(pm.response.text()).not.to.include(\"$2a$\"); });"
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "name": "43. Отключённый получает 401",
+      "request": {
+        "method": "GET",
+        "header": [],
+        "url": "{{baseUrl}}/api/vehicles",
+        "auth": {
+          "type": "basic",
+          "basic": [
+            {
+              "key": "username",
+              "value": "{{otherEmail}}",
+              "type": "string"
+            },
+            {
+              "key": "password",
+              "value": "{{userPassword}}",
+              "type": "string"
+            }
+          ]
+        }
+      },
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "pm.test(\"HTTP 401\", () => pm.response.to.have.status(401));",
+              "pm.test(\"Пароль не раскрывается\", () => { pm.expect(pm.response.text()).not.to.include(\"passwordHash\"); pm.expect(pm.response.text()).not.to.include(\"$2a$\"); });"
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "name": "44. ADMIN восстанавливает доступ",
+      "request": {
+        "method": "PATCH",
+        "header": [
+          {
+            "key": "Content-Type",
+            "value": "application/json"
+          }
+        ],
+        "url": "{{baseUrl}}/api/users/{{otherId}}/state",
+        "auth": {
+          "type": "basic",
+          "basic": [
+            {
+              "key": "username",
+              "value": "{{adminEmail}}",
+              "type": "string"
+            },
+            {
+              "key": "password",
+              "value": "{{adminPassword}}",
+              "type": "string"
+            }
+          ]
+        },
+        "body": {
+          "mode": "raw",
+          "raw": "{\"enabled\": true, \"locked\": false}",
+          "options": {
+            "raw": {
+              "language": "json"
+            }
+          }
+        }
+      },
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "pm.test(\"HTTP 200\", () => pm.response.to.have.status(200));",
+              "pm.test(\"Пароль не раскрывается\", () => { pm.expect(pm.response.text()).not.to.include(\"passwordHash\"); pm.expect(pm.response.text()).not.to.include(\"$2a$\"); });"
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "name": "45. Неверный CSRF",
+      "request": {
+        "method": "DELETE",
+        "header": [],
+        "url": "{{baseUrl}}/api/vehicles/{{vehicleId}}",
+        "auth": {
+          "type": "basic",
+          "basic": [
+            {
+              "key": "username",
+              "value": "{{otherEmail}}",
+              "type": "string"
+            },
+            {
+              "key": "password",
+              "value": "{{userPassword}}",
+              "type": "string"
+            }
+          ]
+        }
+      },
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "pm.test(\"HTTP 403\", () => pm.response.to.have.status(403));",
+              "pm.test(\"Пароль не раскрывается\", () => { pm.expect(pm.response.text()).not.to.include(\"passwordHash\"); pm.expect(pm.response.text()).not.to.include(\"$2a$\"); });"
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "name": "46. ADMIN удаляет сессию",
+      "request": {
+        "method": "DELETE",
+        "header": [],
+        "url": "{{baseUrl}}/api/parking-sessions/{{sessionId}}",
+        "auth": {
+          "type": "basic",
+          "basic": [
+            {
+              "key": "username",
+              "value": "{{adminEmail}}",
+              "type": "string"
+            },
+            {
+              "key": "password",
+              "value": "{{adminPassword}}",
+              "type": "string"
+            }
+          ]
+        }
+      },
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "pm.test(\"HTTP 204\", () => pm.response.to.have.status(204));",
+              "pm.test(\"Пароль не раскрывается\", () => { pm.expect(pm.response.text()).not.to.include(\"passwordHash\"); pm.expect(pm.response.text()).not.to.include(\"$2a$\"); });"
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "name": "47. ADMIN удаляет абонемент",
+      "request": {
+        "method": "DELETE",
+        "header": [],
+        "url": "{{baseUrl}}/api/parking-passes/{{passId}}",
+        "auth": {
+          "type": "basic",
+          "basic": [
+            {
+              "key": "username",
+              "value": "{{adminEmail}}",
+              "type": "string"
+            },
+            {
+              "key": "password",
+              "value": "{{adminPassword}}",
+              "type": "string"
+            }
+          ]
+        }
+      },
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "pm.test(\"HTTP 204\", () => pm.response.to.have.status(204));",
+              "pm.test(\"Пароль не раскрывается\", () => { pm.expect(pm.response.text()).not.to.include(\"passwordHash\"); pm.expect(pm.response.text()).not.to.include(\"$2a$\"); });"
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "name": "48. Владелец удаляет машину",
+      "request": {
+        "method": "DELETE",
+        "header": [],
+        "url": "{{baseUrl}}/api/vehicles/{{vehicleId}}",
+        "auth": {
+          "type": "basic",
+          "basic": [
+            {
+              "key": "username",
+              "value": "{{otherEmail}}",
+              "type": "string"
+            },
+            {
+              "key": "password",
+              "value": "{{userPassword}}",
+              "type": "string"
+            }
+          ]
+        }
+      },
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "pm.test(\"HTTP 204\", () => pm.response.to.have.status(204));",
+              "pm.test(\"Пароль не раскрывается\", () => { pm.expect(pm.response.text()).not.to.include(\"passwordHash\"); pm.expect(pm.response.text()).not.to.include(\"$2a$\"); });"
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "name": "49. ADMIN удаляет пользователя",
+      "request": {
+        "method": "DELETE",
+        "header": [],
+        "url": "{{baseUrl}}/api/users/{{userId}}",
+        "auth": {
+          "type": "basic",
+          "basic": [
+            {
+              "key": "username",
+              "value": "{{adminEmail}}",
+              "type": "string"
+            },
+            {
+              "key": "password",
+              "value": "{{adminPassword}}",
+              "type": "string"
+            }
+          ]
+        }
+      },
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "pm.test(\"HTTP 204\", () => pm.response.to.have.status(204));",
+              "pm.test(\"Пароль не раскрывается\", () => { pm.expect(pm.response.text()).not.to.include(\"passwordHash\"); pm.expect(pm.response.text()).not.to.include(\"$2a$\"); });"
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "name": "50. ADMIN удаляет второго пользователя",
+      "request": {
+        "method": "DELETE",
+        "header": [],
+        "url": "{{baseUrl}}/api/users/{{otherId}}",
+        "auth": {
+          "type": "basic",
+          "basic": [
+            {
+              "key": "username",
+              "value": "{{adminEmail}}",
+              "type": "string"
+            },
+            {
+              "key": "password",
+              "value": "{{adminPassword}}",
+              "type": "string"
+            }
+          ]
+        }
+      },
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "pm.test(\"HTTP 204\", () => pm.response.to.have.status(204));",
+              "pm.test(\"Пароль не раскрывается\", () => { pm.expect(pm.response.text()).not.to.include(\"passwordHash\"); pm.expect(pm.response.text()).not.to.include(\"$2a$\"); });"
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "name": "51. ADMIN удаляет зону",
+      "request": {
+        "method": "DELETE",
+        "header": [],
+        "url": "{{baseUrl}}/api/parking-zones/{{zoneId}}",
+        "auth": {
+          "type": "basic",
+          "basic": [
+            {
+              "key": "username",
+              "value": "{{adminEmail}}",
+              "type": "string"
+            },
+            {
+              "key": "password",
+              "value": "{{adminPassword}}",
+              "type": "string"
+            }
+          ]
+        }
+      },
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "pm.test(\"HTTP 204\", () => pm.response.to.have.status(204));",
+              "pm.test(\"Пароль не раскрывается\", () => { pm.expect(pm.response.text()).not.to.include(\"passwordHash\"); pm.expect(pm.response.text()).not.to.include(\"$2a$\"); });"
+            ]
+          }
+        }
+      ]
+    }
+  ]
+}

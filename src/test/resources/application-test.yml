@@ -1,0 +1,7 @@
+spring:
+  config:
+    import: optional:file:.env-test[.properties]
+  datasource:
+    url: ${TEST_DB_URL:jdbc:postgresql://localhost:5432/parking_lab4_test}
+    username: ${TEST_DB_USER:parking_lab4_app}
+    password: ${TEST_DB_PASSWORD:${DB_PASSWORD}}
